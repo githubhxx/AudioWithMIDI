@@ -1,0 +1,7 @@
+# 默认所有文本文件在仓库和工作区都用 LF
+* text=auto eol=lf
+
+# 如果你有 Windows 专用脚本，可以单独指定 CRLF（可选）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
