@@ -19,7 +19,6 @@ import pretty_midi
 import torch
 from torch.utils.data import Dataset
 
-from .segmenter import TimeBasedMultiScaleSegmenter
 from midi.midi_processor.processor import encode_pretty_midi
 
 
@@ -51,8 +50,15 @@ class CachedMultiscaleLatentDataset(Dataset):
         rng = random.Random(seed)
         rng.shuffle(bases)
 
+        if len(split_ratio) != 3:
+            raise ValueError(f"split_ratio must have 3 elements, got: {split_ratio}")
+
         tr, va, te = split_ratio
+        if min(tr, va, te) < 0:
+            raise ValueError(f"split_ratio cannot contain negative values, got: {split_ratio}")
         s = tr + va + te
+        if s <= 0:
+            raise ValueError(f"split_ratio sum must be > 0, got: {split_ratio}")
         tr, va, te = tr / s, va / s, te / s
 
         n = len(bases)

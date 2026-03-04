@@ -123,7 +123,7 @@ def main():
     }
 
     import os
-    os.makedirs(os.path.dirname(args.output_json), exist_ok=True)
+    os.makedirs(os.path.dirname(args.output_json) or ".", exist_ok=True)
     with open(args.output_json, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
