@@ -25,7 +25,7 @@ import os
 import re
 from dataclasses import dataclass
 from functools import partial
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import torch

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Shared mel/STFT config for scheme3 multiscale train/infer/eval."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 

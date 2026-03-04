@@ -12,8 +12,7 @@ import glob
 import json
 import os
 import pickle
-from dataclasses import asdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import pretty_midi
 import torch
@@ -26,17 +25,25 @@ from .segmenter import TimeBasedMultiScaleSegmenter
 
 
 def _collect_pairs(audio_dir: str, midi_dir: str) -> List[Dict[str, str]]:
+    def _group_by_basename(paths: List[str]) -> Dict[str, List[str]]:
+        out: Dict[str, List[str]] = {}
+        for p in paths:
+            out.setdefault(os.path.splitext(os.path.basename(p))[0], []).append(p)
+        return out
+
     audio_files = glob.glob(os.path.join(audio_dir, "**", "*.wav"), recursive=True)
     midi_files = glob.glob(os.path.join(midi_dir, "**", "*.mid"), recursive=True)
     midi_files += glob.glob(os.path.join(midi_dir, "**", "*.midi"), recursive=True)
 
-    midi_map = {os.path.splitext(os.path.basename(mp))[0]: mp for mp in midi_files}
+    audio_map = _group_by_basename(audio_files)
+    midi_map = _group_by_basename(midi_files)
 
     pairs = []
-    for ap in audio_files:
-        base = os.path.splitext(os.path.basename(ap))[0]
-        if base in midi_map:
-            pairs.append({"basename": base, "audio_path": ap, "midi_path": midi_map[base]})
+    for base in sorted(set(audio_map.keys()) & set(midi_map.keys())):
+        # basename 重名会导致错误配对，直接跳过以避免污染缓存索引
+        if len(audio_map[base]) != 1 or len(midi_map[base]) != 1:
+            continue
+        pairs.append({"basename": base, "audio_path": audio_map[base][0], "midi_path": midi_map[base][0]})
     return pairs
 
 
