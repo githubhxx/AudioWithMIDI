@@ -102,24 +102,23 @@ class LatentSpaceConditionalDecoder(nn.Module):
         # 输出层（映射回潜在空间）
         self.output_projection = nn.Linear(embedding_dim, latent_dim)
 
-    
-def _maybe_extend_pos(self, needed_len: int) -> None:
-    """
-    如果输入序列长度超过 max_seq，则扩展位置编码的覆盖范围。
+    def _maybe_extend_pos(self, needed_len: int) -> None:
+        """
+        如果输入序列长度超过 max_seq，则扩展位置编码的覆盖范围。
 
-    说明：DynamicPositionEmbedding 的实现细节未知；为避免破坏 DecoderLayer 的可学习参数，
-    这里**只**重建位置编码模块，不重建 decoder layers。
-    训练时建议直接把 max_seq 设得足够大（例如与主模型一致 2048/4096）。
-    """
-    if needed_len <= self.max_seq:
-        return
-    new_max = 1
-    while new_max < needed_len:
-        new_max *= 2
-    self.max_seq = new_max
-    self.pos_encoding = DynamicPositionEmbedding(self.embedding_dim, max_seq=self.max_seq)
+        说明：DynamicPositionEmbedding 的实现细节未知；为避免破坏 DecoderLayer 的可学习参数，
+        这里**只**重建位置编码模块，不重建 decoder layers。
+        训练时建议直接把 max_seq 设得足够大（例如与主模型一致 2048/4096）。
+        """
+        if needed_len <= self.max_seq:
+            return
+        new_max = 1
+        while new_max < needed_len:
+            new_max *= 2
+        self.max_seq = new_max
+        self.pos_encoding = DynamicPositionEmbedding(self.embedding_dim, max_seq=self.max_seq)
 
-def forward(
+    def forward(
         self,
         latent_features: torch.Tensor,
         midi_condition: torch.Tensor,

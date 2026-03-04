@@ -11,6 +11,10 @@
 from .unet import ConditionalUNet, TimestepEmbedding, ResBlock, UNetEncoder, UNetDecoder
 from .noise_schedule import NoiseSchedule
 from .latent_conditional_model import LatentSpaceConditionalModel
+from .multiscale.model import MultiScaleLatentSpaceConditionalModel
+from .multiscale.segmenter import TimeBasedMultiScaleSegmenter
+from .multiscale.dataset import PairedTimeSegmentDataset, collate_time_segment_batch
+from .multiscale.structural_features import StructuralFeatureBuilder
 
 __all__ = [
     'ConditionalUNet',
@@ -20,4 +24,9 @@ __all__ = [
     'UNetDecoder',
     'NoiseSchedule',
     'LatentSpaceConditionalModel',
+    'MultiScaleLatentSpaceConditionalModel',
+    'TimeBasedMultiScaleSegmenter',
+    'PairedTimeSegmentDataset',
+    'collate_time_segment_batch',
+    'StructuralFeatureBuilder',
 ]

@@ -6,7 +6,7 @@ UNet 模型用于潜在空间扩散模型
 """
 
 import math
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -114,6 +114,69 @@ def _masked_mean(x: torch.Tensor, valid_mask: Optional[torch.Tensor], dim: int) 
         m = m.unsqueeze(-1)
     denom = m.sum(dim=dim).clamp_min(1e-6)
     return (x * m).sum(dim=dim) / denom
+
+
+def _concat_conditions(
+    conds: List[Optional[torch.Tensor]],
+    masks: List[Optional[torch.Tensor]],
+) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+    valid_pairs = [(c, m) for c, m in zip(conds, masks) if c is not None]
+    if not valid_pairs:
+        return None, None
+
+    # 统一到 (B,S,D)
+    seq_conds = []
+    seq_masks = []
+    for c, m in valid_pairs:
+        if c.dim() == 2:
+            c = c.unsqueeze(1)
+        seq_conds.append(c)
+
+        if m is None:
+            seq_masks.append(torch.ones((c.size(0), c.size(1)), device=c.device, dtype=torch.bool))
+        else:
+            seq_masks.append(_normalize_valid_mask(m, c.size(1)))
+
+    cond = torch.cat(seq_conds, dim=1)
+    mask = torch.cat(seq_masks, dim=1)
+    return cond, mask
+
+
+def _select_multiscale_condition(
+    condition,
+    condition_mask,
+    route: str,
+):
+    """
+    route in {"high_mid", "mid_low", "low", "all"}
+    condition 支持：
+    - tensor: 直接返回
+    - dict: {"high": tensor, "mid": tensor, "low": tensor}
+      condition_mask 可为同 key 的 dict，或单一 mask/tensor。
+    """
+    if condition is None:
+        return None, None
+
+    if not isinstance(condition, dict):
+        return condition, condition_mask
+
+    def _m(k: str):
+        if isinstance(condition_mask, dict):
+            return condition_mask.get(k)
+        return condition_mask
+
+    high = condition.get("high")
+    mid = condition.get("mid")
+    low = condition.get("low")
+
+    if route == "high_mid":
+        return _concat_conditions([high, mid], [_m("high"), _m("mid")])
+    if route == "mid_low":
+        return _concat_conditions([mid, low], [_m("mid"), _m("low")])
+    if route == "low":
+        return _concat_conditions([low], [_m("low")])
+
+    return _concat_conditions([high, mid, low], [_m("high"), _m("mid"), _m("low")])
 
 
 class ResBlock(nn.Module):
@@ -523,13 +586,17 @@ class UNetEncoder(nn.Module):
         enc_block_idx = 0
         for block in self.down_blocks:
             if isinstance(block, (ResBlock, CrossAttentionResBlock)):
-                x = block(x, time_emb=time_emb, condition=condition, condition_mask=condition_mask)
+                route = "high_mid" if enc_block_idx <= 1 else "mid_low"
+                cond_i, mask_i = _select_multiscale_condition(condition, condition_mask, route=route)
+
+                x = block(x, time_emb=time_emb, condition=cond_i, condition_mask=mask_i)
                 features.append(x)
 
                 if DEBUG_UNET:
                     print(
                         f"[ENC] feat_idx={len(features)-1}, "
                         f"block_idx={enc_block_idx}, "
+                        f"route={route}, "
                         f"type={block.__class__.__name__}, "
                         f"shape={tuple(x.shape)}"
                     )
@@ -539,8 +606,9 @@ class UNetEncoder(nn.Module):
                 if DEBUG_UNET:
                     print(f"[ENC] downsample: type={block.__class__.__name__}, shape={tuple(x.shape)}")
 
-        x = self.mid_block1(x, time_emb=time_emb, condition=condition, condition_mask=condition_mask)
-        x = self.mid_block2(x, time_emb=time_emb, condition=condition, condition_mask=condition_mask)
+        mid_cond, mid_mask = _select_multiscale_condition(condition, condition_mask, route="low")
+        x = self.mid_block1(x, time_emb=time_emb, condition=mid_cond, condition_mask=mid_mask)
+        x = self.mid_block2(x, time_emb=time_emb, condition=mid_cond, condition_mask=mid_mask)
 
         return x, features
 
@@ -635,6 +703,7 @@ class UNetDecoder(nn.Module):
                 print(f"[DEC] skip[{i}]: shape={tuple(s.shape)}")
             print(f"[DEC] initial x: shape={tuple(x.shape)}")
 
+        dec_block_idx = 0
         for i, block in enumerate(self.up_blocks):
             if isinstance(block, (ResBlock, CrossAttentionResBlock)):
                 if skip_idx < 0:
@@ -646,11 +715,18 @@ class UNetDecoder(nn.Module):
                 if skip.size(-1) != x.size(-1):
                     skip = F.interpolate(skip, size=x.size(-1), mode="nearest")
 
+                route = "mid_low" if dec_block_idx <= 1 else "high_mid"
+                cond_i, mask_i = _select_multiscale_condition(condition, condition_mask, route=route)
+
                 x = torch.cat([x, skip], dim=1)
-                x = block(x, time_emb=time_emb, condition=condition, condition_mask=condition_mask)
+                x = block(x, time_emb=time_emb, condition=cond_i, condition_mask=mask_i)
 
                 if DEBUG_UNET:
-                    print(f"[DEC] block i={i} type={block.__class__.__name__} x_shape={tuple(x.shape)}")
+                    print(
+                        f"[DEC] block i={i} dec_block_idx={dec_block_idx} route={route} "
+                        f"type={block.__class__.__name__} x_shape={tuple(x.shape)}"
+                    )
+                dec_block_idx += 1
             else:
                 x = block(x)
                 if DEBUG_UNET:
@@ -762,14 +838,21 @@ class ConditionalUNet(nn.Module):
 
         if condition is not None:
             if self.use_cross_attention:
-                if condition.dim() == 2:
+                # dict 条件在各层内部做路由；若是 tensor 则保持原逻辑
+                if not isinstance(condition, dict) and condition.dim() == 2:
                     condition = condition.unsqueeze(1)  # (B,1,D)
             else:
-                # 非 cross-attn：池化到 (B,D)，再投影
-                if condition.dim() == 3:
+                # 非 cross-attn：若是 dict，先合并后池化
+                if isinstance(condition, dict):
+                    condition, condition_mask = _select_multiscale_condition(
+                        condition,
+                        condition_mask,
+                        route="all",
+                    )
+                if condition is not None and condition.dim() == 3:
                     valid = _normalize_valid_mask(condition_mask, condition.size(1))
                     condition = _masked_mean(condition, valid, dim=1)
-                if self.condition_proj is not None:
+                if condition is not None and self.condition_proj is not None:
                     condition = self.condition_proj(condition)
 
         x, features = self.encoder(x, time_emb=time_emb, condition=condition, condition_mask=condition_mask)

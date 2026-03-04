@@ -1,0 +1,95 @@
+# =========================
+# Python / Cache
+# =========================
+# __pycache__/
+# *.py[cod]
+# *.so
+# *.log
+# .pytest_cache/
+# .mypy_cache/
+
+# Jupyter
+# .ipynb_checkpoints/
+
+# Virtual environments
+# .venv/
+# venv/
+# env/
+# ENV/
+
+# =========================
+# IDE / OS
+# =========================
+# .vscode/
+# .idea/
+# .DS_Store
+# Thumbs.db
+
+# =========================
+# Build outputs
+# =========================
+# build/
+# dist/
+# *.egg-info/
+
+# =========================
+# Deep Learning: datasets / checkpoints / outputs
+# (按你的项目实际目录名调整)
+# =========================
+__pycache__/
+*.pyc
+.specstory/
+.vscode/
+logs/
+saved/
+SMD-piano_v2/
+复杂问题分析记录/
+添加CFG第一次训练/
+小问题分析记录/
+.cursorindexingignore/
+__pycache__/
+
+
+# data/
+# dataset/
+# datasets/
+# raw_data/
+# processed_data/
+
+# checkpoints/
+# ckpt/
+# weights/
+# models/
+# pretrained/
+
+# runs/
+# wandb/
+# logs/
+# outputs/
+# results/
+
+# Common model weight extensions
+# *.pt
+# *.pth
+# *.ckpt
+# *.safetensors
+# *.onnx
+
+# Large data formats (按需)
+# *.zip
+# *.tar
+# *.tar.gz
+# *.7z
+# *.npy
+# *.npz
+# *.h5
+# *.hdf5
+# *.pkl
+
+# =========================
+# Secrets
+# =========================
+# .env
+# *.key
+# *.pem
+# *token*
